@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magic 8 Ball with Physics Shake</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @keyframes shake {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    10%  { transform: translate(-8px, -4px) rotate(-3deg); }
+    20%  { transform: translate(8px, 4px) rotate(3deg); }
+    30%  { transform: translate(-6px, 6px) rotate(-2deg); }
+    40%  { transform: translate(6px, -6px) rotate(2deg); }
+    50%  { transform: translate(-4px, 2px) rotate(-1deg); }
+    60%  { transform: translate(4px, -2px) rotate(1deg); }
+    70%  { transform: translate(-2px, 4px) rotate(-1deg); }
+    80%  { transform: translate(2px, -4px) rotate(1deg); }
+    90%  { transform: translate(-1px, 2px) rotate(0deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+  }
+  .shaking { animation: shake 0.6s ease-in-out; }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fadeInUp 0.5s ease forwards; }
+</style>
+</head>
+<body class="bg-gray-950 min-h-screen flex flex-col items-center justify-start pt-8 text-white">
+<div class="w-full max-w-sm px-4">
+  <h1 class="text-2xl font-bold text-center text-purple-300 mb-2">🎱 Magic 8 Ball</h1>
+  <p class="text-center text-gray-400 text-sm mb-6">何でも聞いてね。ボールをクリックして答えを求めよう！</p>
+
+  <!-- Question Input -->
+  <div class="mb-6">
+    <label for="question" class="block text-sm text-gray-400 mb-2 text-center">質問を入力（オプション）</label>
+    <input id="question" type="text" class="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-2 text-center text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="例: 今日は運がいい？">
+  </div>
+
+  <!-- 8 Ball -->
+  <div class="flex justify-center mb-6">
+    <div id="ball" onclick="shake()"
+         class="w-64 h-64 rounded-full cursor-pointer select-none relative flex items-center justify-center"
+         style="background: radial-gradient(circle at 35% 30%, #555, #111 55%, #000); box-shadow: 0 8px 32px rgba(0,0,0,0.8), inset 0 -4px 16px rgba(255,255,255,0.05);"
+         role="button" aria-label="Magic 8 Ballをシェイク">
+      <!-- Inner circle -->
+      <div class="w-28 h-28 rounded-full flex items-center justify-center"
+           style="background: radial-gradient(circle at 40% 35%, #2d1b69, #1a1040); border: 2px solid #3b1fa8;">
+        <div id="ballContent" class="text-center px-3">
+          <span id="ballNum" class="text-white text-5xl font-black opacity-60">8</span>
+          <p id="ballAnswer" class="text-white text-xs font-semibold leading-tight mt-1 hidden"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center text-gray-500 text-sm mb-8" id="prompt">クリックしてシェイク！</p>
+
+  <!-- Custom Answers -->
+  <div class="bg-gray-900 rounded-2xl p-4 mb-4">
+    <h2 class="text-sm font-semibold text-purple-300 mb-3">カスタム答えを追加</h2>
+    <div class="flex gap-2 mb-3">
+      <input id="customAns" type="text" class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="オリジナルの答えを入力" maxlength="40">
+      <button onclick="addCustom()" class="bg-purple-700 hover:bg-purple-800 text-white px-3 py-2 rounded-lg text-sm transition" aria-label="カスタム答えを追加">追加</button>
+    </div>
+    <div id="customList" class="space-y-1"></div>
+    <p id="custom-empty" class="text-gray-600 text-xs">まだカスタム答えがありません</p>
+  </div>
+
+  <!-- Answer History -->
+  <div class="bg-gray-900 rounded-2xl p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-sm font-semibold text-purple-300">答え履歴</h2>
+      <button onclick="clearHistory()" class="text-gray-500 hover:text-gray-300 text-xs transition" aria-label="履歴をクリア">クリア</button>
+    </div>
+    <div id="history" class="space-y-1"></div>
+    <p id="history-empty" class="text-gray-600 text-xs">まだ回答がありません</p>
+  </div>
+</div>
+
+<script>
+const DEFAULT_ANSWERS = [
+  'It is certain.',
+  'It is decidedly so.',
+  'Without a doubt.',
+  'Yes, definitely.',
+  'You may rely on it.',
+  'As I see it, yes.',
+  'Most likely.',
+  'Outlook good.',
+  'Yes.',
+  'Signs point to yes.',
+  'Reply hazy, try again.',
+  'Ask again later.',
+  'Better not tell you now.',
+  'Cannot predict now.',
+  'Concentrate and ask again.',
+  "Don't count on it.",
+  'My reply is no.',
+  'My sources say no.',
+  'Outlook not so good.',
+  'Very doubtful.'
+];
+
+let isShaking = false;
+
+function getCustomAnswers() {
+  try { return JSON.parse(localStorage.getItem('magic8Custom') || '[]'); } catch(e) { return []; }
+}
+function saveCustomAnswers(a) {
+  localStorage.setItem('magic8Custom', JSON.stringify(a));
+}
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem('magic8History') || '[]'); } catch(e) { return []; }
+}
+function saveHistory(h) {
+  localStorage.setItem('magic8History', JSON.stringify(h));
+}
+
+function shake() {
+  if (isShaking) return;
+  isShaking = true;
+
+  const ball = document.getElementById('ball');
+  const numEl = document.getElementById('ballNum');
+  const ansEl = document.getElementById('ballAnswer');
+  const prompt = document.getElementById('prompt');
+
+  ball.classList.add('shaking');
+  numEl.classList.remove('hidden');
+  ansEl.classList.add('hidden');
+  prompt.textContent = '...占い中...';
+  prompt.className = 'text-center text-purple-400 text-sm mb-8 animate-pulse';
+
+  setTimeout(() => {
+    const all = [...DEFAULT_ANSWERS, ...getCustomAnswers()];
+    const answer = all[Math.floor(Math.random() * all.length)];
+    const q = document.getElementById('question').value.trim();
+
+    numEl.classList.add('hidden');
+    ansEl.textContent = answer;
+    ansEl.classList.remove('hidden');
+    ansEl.classList.add('fade-in');
+
+    prompt.textContent = '答えが出た！';
+    prompt.className = 'text-center text-green-400 text-sm mb-8';
+
+    // Save history
+    const hist = getHistory();
+    hist.unshift({ question: q || null, answer, time: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) });
+    if (hist.length > 10) hist.pop();
+    saveHistory(hist);
+    renderHistory();
+
+    ball.classList.remove('shaking');
+    isShaking = false;
+  }, 650);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' || e.key === 'Enter') {
+    const focused = document.activeElement;
+    if (focused.tagName !== 'INPUT') { e.preventDefault(); shake(); }
+  }
+});
+
+function addCustom() {
+  const val = document.getElementById('customAns').value.trim();
+  if (!val) return;
+  const arr = getCustomAnswers();
+  arr.push(val);
+  saveCustomAnswers(arr);
+  document.getElementById('customAns').value = '';
+  renderCustom();
+}
+
+function deleteCustom(idx) {
+  const arr = getCustomAnswers();
+  arr.splice(idx, 1);
+  saveCustomAnswers(arr);
+  renderCustom();
+}
+
+function renderCustom() {
+  const arr = getCustomAnswers();
+  const container = document.getElementById('customList');
+  const empty = document.getElementById('custom-empty');
+  container.innerHTML = '';
+  if (arr.length === 0) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  arr.forEach((a, i) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center justify-between bg-gray-800 rounded-lg px-3 py-1.5';
+
+    const textEl = document.createElement('span');
+    textEl.className = 'text-xs text-gray-300 flex-1';
+    textEl.textContent = a;
+    row.appendChild(textEl);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'text-gray-600 hover:text-red-400 ml-2 transition text-sm';
+    delBtn.textContent = '×';
+    delBtn.setAttribute('aria-label', '「' + a + '」を削除');
+    delBtn.onclick = () => deleteCustom(i);
+    row.appendChild(delBtn);
+
+    container.appendChild(row);
+  });
+}
+
+function renderHistory() {
+  const hist = getHistory();
+  const container = document.getElementById('history');
+  const empty = document.getElementById('history-empty');
+  container.innerHTML = '';
+  if (hist.length === 0) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  hist.forEach(h => {
+    const row = document.createElement('div');
+    row.className = 'bg-gray-800 rounded-lg px-3 py-2';
+
+    if (h.question) {
+      const qEl = document.createElement('p');
+      qEl.className = 'text-xs text-gray-400';
+      qEl.textContent = 'Q: ' + h.question;
+      row.appendChild(qEl);
+    }
+
+    const aRow = document.createElement('div');
+    aRow.className = 'flex justify-between items-center';
+
+    const aEl = document.createElement('p');
+    aEl.className = 'text-xs text-purple-300 font-medium';
+    aEl.textContent = h.answer;
+    aRow.appendChild(aEl);
+
+    const timeEl = document.createElement('p');
+    timeEl.className = 'text-xs text-gray-600';
+    timeEl.textContent = h.time;
+    aRow.appendChild(timeEl);
+
+    row.appendChild(aRow);
+    container.appendChild(row);
+  });
+}
+
+renderCustom();
+renderHistory();
+</script>
+</body>
+</html>
